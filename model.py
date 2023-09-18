@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 
 
-def downshuffle(self, var, r):
-    b, c, h, w = var.size()  # batch channel height width
+def downshuffle(var, r):
+    b, c, h, w = var.size()
     out_channel = c * (r ** 2)
     out_h = h // r
     out_w = w // r
@@ -25,6 +25,22 @@ class LightenBlock(torch.nn.Module):
         out = self.conv_Decoder(code_lighten)
         return out
 
+
+class LightenBlock_att(torch.nn.Module):
+    def __init__(self, input_size, output_size, kernel_size, stride, padding, bias=True,groups=1):
+        super(LightenBlock_att, self).__init__()
+        codedim=output_size//2
+        self.conv_Encoder = ConvBlock_att(input_size, codedim, 3, 1, 1,isuseBN=False,groups=groups)
+        self.conv_Offset = ConvBlock_att(codedim, codedim, 3, 1, 1,isuseBN=False,groups=groups)
+        self.conv_Decoder = ConvBlock_att(codedim, output_size, 3, 1, 1,isuseBN=False,groups=groups)
+
+    def forward(self, x):
+        code= self.conv_Encoder(x)
+        offset = self.conv_Offset(code)
+        code_lighten = code+offset
+        out = self.conv_Decoder(code_lighten)
+        return out
+
 class DarkenBlock(torch.nn.Module):
     def __init__(self, input_size, output_size, kernel_size, stride, padding, bias=True):
         super(DarkenBlock, self).__init__()
@@ -32,6 +48,21 @@ class DarkenBlock(torch.nn.Module):
         self.conv_Encoder = ConvBlock(input_size, codedim, 3, 1, 1,isuseBN=False)
         self.conv_Offset = ConvBlock(codedim, codedim, 3, 1, 1,isuseBN=False)
         self.conv_Decoder = ConvBlock(codedim, output_size, 3, 1, 1,isuseBN=False)
+
+    def forward(self, x):
+        code= self.conv_Encoder(x)
+        offset = self.conv_Offset(code)
+        code_lighten = code-offset
+        out = self.conv_Decoder(code_lighten)
+        return out
+
+class DarkenBlock_att(torch.nn.Module):
+    def __init__(self, input_size, output_size, kernel_size, stride,  padding, bias=True, groups=1):
+        super(DarkenBlock_att, self).__init__()
+        codedim=output_size//2
+        self.conv_Encoder = ConvBlock_att(input_size, codedim, 3, 1, 1,isuseBN=False,groups=groups)
+        self.conv_Offset = ConvBlock_att(codedim, codedim, 3, 1, 1,isuseBN=False,groups=groups)
+        self.conv_Decoder = ConvBlock_att(codedim, output_size, 3, 1, 1,isuseBN=False,groups=groups)
 
     def forward(self, x):
         code= self.conv_Encoder(x)
@@ -85,7 +116,7 @@ class LBP_noFA(torch.nn.Module):
     def __init__(self, input_size, output_size, kernel_size, stride, padding):
         super(LBP_noFA, self).__init__()
         #self.fusion = FusionLayer(input_size,output_size)
-        self.conv1_1 = LightenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
+        self.conv1_1 = LightenBlock(input_size, output_size, kernel_size, stride, padding, bias=True)
         self.conv2 = DarkenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
         self.conv3 = LightenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
         self.local_weight1_1 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
@@ -99,6 +130,45 @@ class LBP_noFA(torch.nn.Module):
         h_residue = self.conv3(residue)
         hr_weight = self.local_weight2_1(hr)
         return hr_weight + h_residue
+
+class LBP_att(torch.nn.Module):
+    def __init__(self, input_size, output_size, kernel_size, stride, padding, groups):
+        super(LBP_att, self).__init__()
+        #self.fusion = FusionLayer(input_size,output_size)
+        self.conv1_1 = LightenBlock_att(input_size, output_size, kernel_size, stride, padding, bias=True,groups=groups)
+        self.conv2 = DarkenBlock_att(output_size, output_size, kernel_size, stride, padding, bias=True,groups=groups)
+        self.conv3 = LightenBlock_att(output_size, output_size, kernel_size, stride, padding, bias=True,groups=groups)
+        self.local_weight1_1 = ConvBlock_att(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True,groups=groups)
+        self.local_weight2_1 = ConvBlock_att(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True,groups=groups)
+
+    def forward(self, x):
+        #x=self.fusion(x)
+        hr = self.conv1_1(x) #Y飘
+        lr = self.conv2(hr) #X飘
+        residue = self.local_weight1_1(x) - lr
+        h_residue = self.conv3(residue)
+        hr_weight = self.local_weight2_1(hr)
+        return hr_weight + h_residue
+
+
+class LBP_inter(torch.nn.Module):
+    def __init__(self, input_size, output_size, kernel_size, stride, padding):
+        super(LBP_inter, self).__init__()
+        #self.fusion = FusionLayer(input_size,output_size)
+        self.conv1_1 = LightenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
+        self.conv2 = DarkenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
+        self.conv3 = LightenBlock(output_size, output_size, kernel_size, stride, padding, bias=True)
+        self.local_weight1_1 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
+        self.local_weight2_1 = ConvBlock(output_size, output_size, kernel_size=1, stride=1, padding=0, bias=True)
+
+    def forward(self, x):
+        #x=self.fusion(x)
+        hr = self.conv1_1(x) #Y飘
+        lr = self.conv2(hr) #X飘
+        residue = self.local_weight1_1(x) - lr
+        h_residue = self.conv3(residue)
+        hr_weight = self.local_weight2_1(hr)
+        return hr_weight + h_residue, hr,lr,residue,h_residue
 
 class DLN(nn.Module):   # 总model
     def __init__(self, input_dim=3, dim=64):
@@ -269,7 +339,7 @@ class DLN_M_baseline_v2(nn.Module):
         #self.feat_out_2 = LBP_noFA(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
         #self.feat_out_3 = LBP_noFA(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
 
-        self.feature = ConvBlock(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feature = ConvBlock(input_size=2*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
         self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
 
         for m in self.modules():
@@ -310,6 +380,427 @@ class DLN_M_baseline_v2(nn.Module):
         return pred
 
 
+class DLN_M_Att(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_Att, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock_att(inNet_dim, dim, 3, 1, 1)
+        self.feat2 = ConvBlock_att(dim, dim, 3, 1, 1)
+
+        self.up4=nn.PixelShuffle(2)
+        self.up16=nn.PixelShuffle(4)
+
+        self.feat_out_1 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_2 = LBP_att(input_size=4*dim, output_size=4*dim, kernel_size=3, stride=1, padding=1,groups=128)
+        self.feat_out_3 = LBP_att(input_size=16*dim, output_size=16*dim, kernel_size=3, stride=1, padding=1,groups=512)
+
+        #self.feature = ConvBlock(input_size=4*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feature = FusionLayer(4*dim, dim) #Attention
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+        feature = self.feat2(feature) #64HW
+
+        #level 1
+        feature_1_in=feature
+        feature_1_out = self.feat_out_1(feature) #64HW
+
+        #level 2
+        feature_2_in = downshuffle(feature,2) #256 H/4 W/4
+        feature_2_out = self.feat_out_2(feature_2_in)
+        feature_2_out=self.up4(feature_2_out)
+
+        feature_3_in = downshuffle(feature,4)
+        feature_3_out = self.feat_out_3(feature_3_in)
+        feature_3_out = self.up16(feature_3_out)
+
+
+        feature_in = torch.cat([feature_1_in, feature_1_out,feature_2_out,feature_3_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+
+        return pred
+
+class DLN_M_Att(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_Att, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock_att(inNet_dim, dim, 3, 1, 1)
+        self.feat2 = ConvBlock_att(dim, dim, 3, 1, 1)
+
+        self.up4=nn.PixelShuffle(2)
+        self.up16=nn.PixelShuffle(4)
+
+        self.feat_out_1 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_2 = LBP_att(input_size=4*dim, output_size=4*dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_3 = LBP_att(input_size=16*dim, output_size=16*dim, kernel_size=3, stride=1, padding=1,groups=1)
+
+        #self.feature = ConvBlock(input_size=4*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feature = FusionLayer(4*dim, dim) #Attention
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+        feature = self.feat2(feature) #64HW
+
+        #level 1
+        feature_1_in=feature
+        feature_1_out = self.feat_out_1(feature) #64HW
+
+        #level 2
+        feature_2_in = downshuffle(feature,2) #256 H/4 W/4
+        feature_2_out = self.feat_out_2(feature_2_in)
+        feature_2_out=self.up4(feature_2_out)
+
+        feature_3_in = downshuffle(feature,4)
+        feature_3_out = self.feat_out_3(feature_3_in)
+        feature_3_out = self.up16(feature_3_out)
+
+
+        feature_in = torch.cat([feature_1_in, feature_1_out,feature_2_out,feature_3_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+
+        return pred
+
+
+class DLN_M_Att_Ab1(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_Att_Ab1, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock_att(inNet_dim, dim, 3, 1, 1)
+        self.feat2 = ConvBlock_att(dim, dim, 3, 1, 1)
+
+        #self.up4=nn.PixelShuffle(2)
+        #self.up16=nn.PixelShuffle(4)
+
+        self.feat_out_1 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_2 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_3 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+
+        #self.feature = ConvBlock(input_size=4*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feature = FusionLayer(4*dim, dim) #Attention
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+        feature = self.feat2(feature) #64HW
+
+        #level 1
+        feature_1_in=feature
+        feature_1_out = self.feat_out_1(feature) #64HW
+
+        #level 2
+        #feature_2_in = downshuffle(feature,2) #256 H/4 W/4
+        feature_2_out = self.feat_out_2(feature)
+        #feature_2_out=self.up4(feature_2_out)
+
+        #feature_3_in = downshuffle(feature,4)
+        feature_3_out = self.feat_out_3(feature)
+        #feature_3_out = self.up16(feature_3_out)
+
+
+        feature_in = torch.cat([feature_1_in,feature_1_out,feature_2_out,feature_3_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+        return pred
+
+class DLN_M_Att_Ab2(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_Att_Ab2, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock_att(inNet_dim, dim, 3, 1, 1)
+        self.feat2 = ConvBlock_att(dim, dim, 3, 1, 1)
+
+        self.up4=nn.PixelShuffle(2)
+        self.up16=nn.PixelShuffle(4)
+
+        self.feat_out_1 = ConvBlock_att(input_size=dim,output_size=dim,kernel_size=3,stride=1,padding=1,bias=True,isuseBN=False,groups=1)
+        self.feat_out_2 = ConvBlock_att(input_size=4*dim,output_size=4*dim,kernel_size=3,stride=1,padding=1,bias=True,isuseBN=False,groups=1)
+        self.feat_out_3 = ConvBlock_att(input_size=16*dim,output_size=16*dim,kernel_size=3,stride=1,padding=1,bias=True,isuseBN=False,groups=1)
+        #self.feat_out_2 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+        #self.feat_out_3 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+
+        #self.feature = ConvBlock(input_size=4*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feature = FusionLayer(4*dim, dim) #Attention
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+        feature = self.feat2(feature)  # 64HW
+
+        # level 1
+        feature_1_in = feature
+        feature_1_out = self.feat_out_1(feature)  # 64HW
+
+        # level 2
+        feature_2_in = downshuffle(feature, 2)  # 256 H/4 W/4
+        feature_2_out = self.feat_out_2(feature_2_in)
+        feature_2_out = self.up4(feature_2_out)
+
+        feature_3_in = downshuffle(feature, 4)
+        feature_3_out = self.feat_out_3(feature_3_in)
+        feature_3_out = self.up16(feature_3_out)
+
+        feature_in = torch.cat([feature_1_in, feature_1_out, feature_2_out, feature_3_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+
+        return pred
+
+class DLN_M_Att_Ab3(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_Att_Ab3, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock_att(inNet_dim, dim, 3, 1, 1)
+        self.feat2 = ConvBlock_att(dim, dim, 3, 1, 1)
+
+        self.up4=nn.PixelShuffle(2)
+        self.up16=nn.PixelShuffle(4)
+
+        #self.feat_out_1 = ConvBlock_att(input_size=dim,output_size=dim,kernel_size=3,stride=1,padding=1,bias=True,isuseBN=False,groups=1)
+        #self.feat_out_2 = ConvBlock_att(input_size=dim,output_size=dim,kernel_size=3,stride=1,padding=1,bias=True,isuseBN=False,groups=1)
+        #self.feat_out_3 = ConvBlock_att(input_size=dim,output_size=dim,kernel_size=3,stride=1,padding=1,bias=True,isuseBN=False,groups=1)
+        self.feat_out_1 = LBP_att(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_2 = LBP_att(input_size=4*dim, output_size=4*dim, kernel_size=3, stride=1, padding=1,groups=1)
+        self.feat_out_3 = LBP_att(input_size=16*dim, output_size=16*dim, kernel_size=3, stride=1, padding=1,groups=1)
+
+        #self.feature = ConvBlock(input_size=4*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        #self.feature = FusionLayer(4*dim, dim) #Attention
+        self.feature = ConvBlock_att(4*dim, dim,3,1,1,True,False,1)
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+        feature = self.feat2(feature)  # 64HW
+
+        # level 1
+        feature_1_in = feature
+        feature_1_out = self.feat_out_1(feature)  # 64HW
+
+        # level 2
+        feature_2_in = downshuffle(feature, 2)  # 256 H/4 W/4
+        feature_2_out = self.feat_out_2(feature_2_in)
+        feature_2_out = self.up4(feature_2_out)
+
+        feature_3_in = downshuffle(feature, 4)
+        feature_3_out = self.feat_out_3(feature_3_in)
+        feature_3_out = self.up16(feature_3_out)
+
+        feature_in = torch.cat([feature_1_in, feature_1_out, feature_2_out, feature_3_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+
+        return pred
+
+class DLN_M_v2_inter(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_v2_inter, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock(inNet_dim, dim, 3, 1, 1)
+        #self.feat2 = ConvBlock(2 * dim, dim, 3, 1, 1)
+
+        self.feat_out_1 = LBP_inter(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        #self.feat_out_2 = LBP_noFA(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        #self.feat_out_3 = LBP_noFA(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+
+        self.feature = ConvBlock(input_size=2*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+
+        feature_1_in = feature
+        feature_1_out ,Yp,Xp,Xr,Yr= self.feat_out_1(feature_1_in)
+
+        #feature_2_in = feature
+        #feature_2_out = self.feat_out_2(feature_2_in)
+
+        #feature_3_in = feature
+        #feature_3_out = self.feat_out_3(feature_3_in)
+
+
+        feature_in = torch.cat([feature_1_in, feature_1_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+
+        return pred,Yp,Xp,Xr,Yr
+
+class DLN_M_Att_inter(nn.Module):
+    def __init__(self, input_dim=3, dim=64):
+        super(DLN_M_Att_inter, self).__init__()
+        inNet_dim = input_dim + 1
+        # 1:brightness
+        self.feat1 = ConvBlock(inNet_dim, dim, 3, 1, 1)
+        self.feat2 = ConvBlock(2 * dim, dim, 3, 1, 1)
+
+        self.up4=nn.PixelShuffle(2)
+        self.up16=nn.PixelShuffle(4)
+
+        self.feat_out_1 = LBP_inter(input_size=dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feat_out_2 = LBP_inter(input_size=4*dim, output_size=4*dim, kernel_size=3, stride=1, padding=1,group=16)
+        self.feat_out_3 = LBP_inter(input_size=16*dim, output_size=16*dim, kernel_size=3, stride=1, padding=1,group=1024)
+
+        #self.feature = ConvBlock(input_size=4*dim, output_size=dim, kernel_size=3, stride=1, padding=1)
+        self.feature = FusionLayer(input_size=4*dim, output_size=dim) #Attention
+        self.out = nn.Conv2d(in_channels=dim, out_channels=3, kernel_size=3, stride=1, padding=1)
+
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif classname.find('ConvTranspose2d') != -1:
+                torch.nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, x_ori, tar=None):
+        # data gate 0~1转-1～1
+        x = (x_ori - 0.5) * 2
+        x_bright, _ = torch.max(x_ori, dim=1, keepdim=True)
+
+        x_in = torch.cat((x, x_bright), 1)
+
+        # feature extraction
+        feature = self.feat1(x_in)
+        feature = self.feat2(feature) #64HW
+
+        #level 1
+        feature_1_in=feature
+        feature_1_out ,Yp,Xp,Xr,Yr= self.feat_out_1(feature) #64HW
+
+        #level 2
+        feature_2_in = downshuffle(feature,2) #256 H/4 W/4
+        feature_2_out = self.feat_out_2(feature_2_in)
+        feature_2_out=self.up4(feature_2_out)
+
+        feature_3_in = downshuffle(feature,4)
+        feature_3_out = self.feat_out_3(feature_3_in)
+        feature_3_out = self.up16(feature_3_out)
+
+
+        feature_in = torch.cat([feature_1_in, feature_1_out,feature_2_out,feature_3_out], dim=1)
+        feature_out = self.feature(feature_in)
+        pred = self.out(feature_out) + x_ori
+
+        return pred,Yp,Xp,Xr,Yr
 ############################################################################################
 # Base models
 ############################################################################################
@@ -319,6 +810,22 @@ class ConvBlock(torch.nn.Module):
         super(ConvBlock, self).__init__()
         self.isuseBN = isuseBN
         self.conv = torch.nn.Conv2d(input_size, output_size, kernel_size, stride, padding, bias=bias)
+        if self.isuseBN:
+            self.bn = nn.BatchNorm2d(output_size)
+        self.act = torch.nn.PReLU()
+
+    def forward(self, x):
+        out = self.conv(x)
+        if self.isuseBN:
+            out = self.bn(out)
+        out = self.act(out)
+        return out
+
+class ConvBlock_att(torch.nn.Module):
+    def __init__(self, input_size, output_size, kernel_size, stride, padding,  bias=True, isuseBN=False,groups=1):
+        super(ConvBlock_att, self).__init__()
+        self.isuseBN = isuseBN
+        self.conv = torch.nn.Conv2d(input_size, output_size, kernel_size, stride, padding, bias=bias,groups=groups)
         if self.isuseBN:
             self.bn = nn.BatchNorm2d(output_size)
         self.act = torch.nn.PReLU()
@@ -477,3 +984,39 @@ class Finetunemodel(nn.Module): #SCI的网络
         r = input / i
         r = torch.clamp(r, 0, 1)
         return i, r
+
+
+########
+#注意力
+########
+
+class SELayer(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super(SELayer, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid()
+        )
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out')
+                if m.bias is not None:
+                    torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                torch.nn.init.constant_(m.weight, 1)
+                torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                torch.nn.init.normal_(m.weight, std=0.001)
+                if m.bias is not None:
+                    torch.nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)

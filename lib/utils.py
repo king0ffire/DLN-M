@@ -1,6 +1,22 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
+
+
+def gradient(img):
+    height = img.size(2)
+    width = img.size(3)
+    gradient_h = (img[:,:,2:,:]-img[:,:,:height-2,:]).abs()
+    gradient_w = (img[:, :, :, 2:] - img[:, :, :, :width-2]).abs()
+    gradient_h = F.pad(gradient_h, [0, 0, 1, 1], 'replicate')
+    gradient_w = F.pad(gradient_w, [1, 1, 0, 0], 'replicate')
+    gradient2_h = (img[:,:,4:,:]-img[:,:,:height-4,:]).abs()
+    gradient2_w = (img[:, :, :, 4:] - img[:, :, :, :width-4]).abs()
+    gradient2_h = F.pad(gradient2_h, [0, 0, 2, 2], 'replicate')
+    gradient2_w = F.pad(gradient2_w, [2, 2, 0, 0], 'replicate')
+    return gradient_h*gradient2_h, gradient_w*gradient2_w
+
 
 def print_network(net):
     num_params = 0
@@ -157,9 +173,7 @@ def define_weights(num):
     return weights
 
 
-def get_na(img_loww, amp=5): #输入2Darray取值【0，1】
-    bins = np.float32((np.logspace(0, 8, 128, endpoint=True, base=2.0) - 1)) / 255.0
-    weights = define_weights(5)
+def get_na(bins,weights,img_loww, amp=5): #输入2Darray取值【0，1】
 
     H, W = img_loww.shape
     arr = img_loww * 1
@@ -168,15 +182,24 @@ def get_na(img_loww, amp=5): #输入2Darray取值【0，1】
         selection_dict[weights[ii]] = (bins[ii] <= arr) & (arr < bins[ii + 1])
     mask = np.select(condlist=selection_dict.values(), choicelist=selection_dict.keys())
 
-    mask_sum1 = np.sum(mask, dtype=np.float64)
+    mask_sum1 = np.sum(mask, dtype=np.float64) #改32
 
-    na1 = np.float32(np.float64(mask_sum1 * 0.01 * amp) / np.sum(img_loww * mask, dtype=np.float64))
+    na1 = np.float64(np.float64(mask_sum1 * 0.01 * amp) / np.sum(img_loww * mask, dtype=np.float64)) # 全改float32
     # As in SID max amplification is limited to 300
     if na1 > 100.0:
-        na1 = np.float32(100.0)
+        na1 = np.float64(100.0)
     if na1 < 1.0:
-        na1 = np.float32(1.0)
+        na1 = np.float64(1.0)
 
     selection_dict.clear()
 
     return na1
+
+
+def print_network(net):
+    num_params = 0
+    for param in net.parameters():
+        num_params += param.numel()
+    print(net)
+    print('Total number of parameters: %d' % num_params)
+

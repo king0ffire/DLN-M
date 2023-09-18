@@ -10,11 +10,10 @@ import torch
 import torch.utils.data as data
 import torchvision
 from PIL import Image, ImageOps, ImageEnhance
-from lib.utils import get_na
+from lib.utils import get_na, define_weights
 
 path = os.getcwd()
 sys.path.append(path)
-
 
 
 def is_image_file(filename):
@@ -34,7 +33,7 @@ def rescale_img(img_in, scale):
     return img_in
 
 
-def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1): #PIL.Image
+def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1):  # PIL.Image
     (ih, iw) = img_in.size
     # (th, tw) = (scale * ih, scale * iw)
 
@@ -83,12 +82,12 @@ def augment(img_in, img_tar, flip_h=True, rot=True):
     return img_in, img_tar, info_aug
 
 
-class DatasetFromFolder(data.Dataset): #get时才把图片读入
+class DatasetFromFolder(data.Dataset):  # get时才把图片读入
     def __init__(self, HR_dir, LR_dir, patch_size, upscale_factor, data_augmentation,
                  transform=None):
         super(DatasetFromFolder, self).__init__()
-        #self.hr_image_filenames = [join(HR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
-        #self.lr_image_filenames = [join(LR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
+        # self.hr_image_filenames = [join(HR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
+        # self.lr_image_filenames = [join(LR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
         self.lr_image_filenames = [join(LR_dir, x) for x in listdir(LR_dir) if is_image_file(x)]
 
         self.patch_size = patch_size
@@ -121,11 +120,11 @@ class DatasetFromFolder(data.Dataset): #get时才把图片读入
 
     def __len__(self):
         return len(self.hr_image_filenames)
-        #return len(self.lr_image_filenames)
+        # return len(self.lr_image_filenames)
 
 
-class DatasetFromFolder_nonsup(data.Dataset): #通过get_na直接增强了图像
-    def __init__(self, synstore, LR_dir, patch_size, upscale_factor, data_augmentation, transform=None,debug=False):
+class DatasetFromFolder_nonsup(data.Dataset):  # 通过get_na直接增强了图像
+    def __init__(self, synstore, LR_dir, patch_size, upscale_factor, data_augmentation, transform=None, debug=False):
         super(DatasetFromFolder_nonsup, self).__init__()
         # self.hr_image_filenames = [join(HR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
         # self.lr_image_filenames = [join(LR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
@@ -136,50 +135,51 @@ class DatasetFromFolder_nonsup(data.Dataset): #通过get_na直接增强了图像
         self.transform = transform
         self.data_augmentation = data_augmentation
 
-        self.low=[]
-        self.high=[]
+        self.low = []
+        self.high = []
+
         for idx in range(len(self.lr_image_filenames)):
             input = load_img(self.lr_image_filenames[idx])  # type:PIL.Image
-            target = np.asarray(input)/255
-            natar=target.transpose([2,0,1])
-            ratio=0.0
-            for i in range(3):#RGB
-                ratio+=get_na(natar[i])
-            ratio=ratio/3
-            target = target*ratio*255
-            target=np.clip(target,0,255)
+            target = np.asarray(input) / 255
+            natar = target.transpose([2, 0, 1])
+            ratio = 0.0
+            for i in range(3):  # RGB
+                ratio += get_na(natar[i])
+            ratio = ratio / 3
+            target = target * ratio * 255
+            target = np.clip(target, 0, 255)
             target = Image.fromarray(target.astype('uint8')).convert("RGB")
             if debug:
-                target.save(join(synstore, basename(self.lr_image_filenames[idx])))  #备用查验
-                print("Synthtised {} stored, ratio:{:.2f}".format(basename(self.lr_image_filenames[idx]),ratio))
+                target.save(join(synstore, basename(self.lr_image_filenames[idx])))  # 备用查验
+                print("Synthtised {} stored, ratio:{:.2f}".format(basename(self.lr_image_filenames[idx]), ratio))
             self.low.append(input)
             self.high.append(target)
-            if idx % 50==0:
-                print("loading:{}/{}".format(idx,len(self.lr_image_filenames)))
+            if idx % 50 == 0:
+                print("loading:{}/{}".format(idx, len(self.lr_image_filenames)))
 
     def __getitem__(self, index):
 
-        #target = load_img(self.hr_image_filenames[index])
+        # target = load_img(self.hr_image_filenames[index])
         # name = self.hr_image_filenames[index]
         # lr_name = name[:25]+'LR/'+name[28:-4]+'x4.png'
         # lr_name = name[:18] + 'LR_4x/' + name[21:]
-        #input = load_img(self.lr_image_filenames[index]) # type:PIL.Image
-        #target=np.asarray(input.getdata()).reshape(3,input.size[0],input.size[1])
+        # input = load_img(self.lr_image_filenames[index]) # type:PIL.Image
+        # target=np.asarray(input.getdata()).reshape(3,input.size[0],input.size[1])
 
         # target = ImageOps.equalize(target)
         # input_eq = ImageOps.equalize(input)
         # target = ImageOps.equalize(target)
         #         # input = ImageOps.equalize(input)
-        #input, target, = get_patch(input, target, self.patch_size, self.upscale_factor)
+        # input, target, = get_patch(input, target, self.patch_size, self.upscale_factor)
 
-        #if self.data_augmentation:
+        # if self.data_augmentation:
         #    img_in, img_tar, _ = augment(input, target)
 
-        #if self.transform:
+        # if self.transform:
         #    img_in = self.transform(img_in)
         #    img_tar = self.transform(img_tar)
 
-        #return img_in, img_tar
+        # return img_in, img_tar
         input, target, = get_patch(self.low[index], self.high[index], self.patch_size, self.upscale_factor)
         if self.data_augmentation:
             img_in, img_tar, _ = augment(input, target)
@@ -187,15 +187,15 @@ class DatasetFromFolder_nonsup(data.Dataset): #通过get_na直接增强了图像
         if self.transform:
             img_in = self.transform(img_in)
             img_tar = self.transform(img_tar)
-        return img_in,img_tar
+        return img_in, img_tar
 
     def __len__(self):
-        #return len(self.hr_image_filenames)
+        # return len(self.hr_image_filenames)
         return len(self.lr_image_filenames)
 
 
 class DatasetFromFolderEval(data.Dataset):
-    def __init__(self, lr_dir, upscale_factor, transform=None):
+    def __init__(self, lr_dir, upscale_factor=1, transform=None):
         super(DatasetFromFolderEval, self).__init__()
         self.image_filenames = [join(lr_dir, x) for x in listdir(lr_dir) if is_image_file(x)]
         self.upscale_factor = upscale_factor
@@ -204,8 +204,9 @@ class DatasetFromFolderEval(data.Dataset):
     def __getitem__(self, index):
         input = load_img(self.image_filenames[index])
         _, file = os.path.split(self.image_filenames[index])
-
-        bicubic = rescale_img(input, self.upscale_factor)
+        bicubic=input
+        if self.upscale_factor !=1 :
+            bicubic = rescale_img(input, self.upscale_factor)
 
         if self.transform:
             # input = self.transform(input)
@@ -262,9 +263,10 @@ class Lowlight_DatasetFromVOC(data.Dataset):
         low_img = (low_img.clip(0, 255)).astype("uint8")
         low_img = Image.fromarray(cv2.cvtColor(low_img, cv2.COLOR_BGR2RGB))
 
-        img_in, img_tar = get_patch(low_img, high_image, self.patch_size, self.upscale_factor) #从两个图像中的相同位置裁剪出patch_size大小的正方图像
+        img_in, img_tar = get_patch(low_img, high_image, self.patch_size,
+                                    self.upscale_factor)  # 从两个图像中的相同位置裁剪出patch_size大小的正方图像
 
-        if self.data_augmentation: #数据增强：随机翻转
+        if self.data_augmentation:  # 数据增强：随机翻转
             img_in, img_tar, _ = augment(img_in, img_tar)
 
         if self.transform:
@@ -290,8 +292,8 @@ class Lowlight_DatasetFromVOC_AlltoMemory(data.Dataset):
         self.transform = transform
         self.data_augmentation = data_augmentation
 
-        self.low=[]
-        self.high=[]
+        self.low = []
+        self.high = []
         print("loading dataset to memory")
         for idx in range(len(self.image_filenames)):
             ori_img = load_img(self.image_filenames[idx])  # PIL image
@@ -334,9 +336,8 @@ class Lowlight_DatasetFromVOC_AlltoMemory(data.Dataset):
                 img_tar = self.transform(img_tar)
             self.low.append(img_in)
             self.high.append(img_tar)
-            if idx%100==0:
-                print("{}/{}".format(idx,len(self.image_filenames)))
-
+            if idx % 100 == 0:
+                print("{}/{}".format(idx, len(self.image_filenames)))
 
     def __getitem__(self, index):
         return self.low[index], self.high[index]
@@ -358,8 +359,8 @@ class Lowlight_DatasetFromVOC_Store(data.Dataset):
         self.transform = transform
         self.data_augmentation = data_augmentation
 
-        self.low=[]
-        self.high=[]
+        self.low = []
+        self.high = []
 
     def __getitem__(self, index):
 
@@ -393,9 +394,10 @@ class Lowlight_DatasetFromVOC_Store(data.Dataset):
         low_img = (low_img.clip(0, 255)).astype("uint8")
         low_img = Image.fromarray(cv2.cvtColor(low_img, cv2.COLOR_BGR2RGB))
 
-        img_in, img_tar = get_patch(low_img, high_image, self.patch_size, self.upscale_factor) #从两个图像中的相同位置裁剪出patch_size大小的正方图像
+        img_in, img_tar = get_patch(low_img, high_image, self.patch_size,
+                                    self.upscale_factor)  # 从两个图像中的相同位置裁剪出patch_size大小的正方图像
 
-        if self.data_augmentation: #数据增强：随机翻转
+        if self.data_augmentation:  # 数据增强：随机翻转
             img_in, img_tar, _ = augment(img_in, img_tar)
 
         if self.transform:
@@ -407,37 +409,171 @@ class Lowlight_DatasetFromVOC_Store(data.Dataset):
     def __len__(self):
         return len(self.image_filenames)
 
+
 class LowLightDatasetFromFolder(data.Dataset):
     def __init__(self, LR_dir, patch_size, data_augmentation, data_transform):
         self.lr_image_filenames = [join(LR_dir, x) for x in listdir(LR_dir) if is_image_file(x)]
         self.patch_size = patch_size
         self.data_augmentation = data_augmentation
-        self.data_transform= data_transform
+        self.data_transform = data_transform
         self.low = []
-        self.tensor=[]
-        self.augmentation=torchvision.transforms.Compose([torchvision.transforms.CenterCrop(patch_size),
-                                                     torchvision.transforms.RandomHorizontalFlip(0.5),
-                                                     torchvision.transforms.RandomVerticalFlip(0.5)])
+        self.tensor = []
+        self.augmentation = torchvision.transforms.Compose([torchvision.transforms.CenterCrop(patch_size),
+                                                            torchvision.transforms.RandomHorizontalFlip(0.5),
+                                                            torchvision.transforms.RandomVerticalFlip(0.5)])
 
-        self.transform=torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
         for idx in range(len(self.lr_image_filenames)):
             input = Image.open(self.lr_image_filenames[idx])  # type:PIL.Image
-            array=np.asarray(input).transpose(2,0,1)
-            #intensor=self.transform(input)
+            array = np.asarray(input).transpose(2, 0, 1) # CHW
+            # intensor=self.transform(input)
             self.low.append(input)
             if idx % 50 == 0:
                 print("loading:{}/{}".format(idx, len(self.lr_image_filenames)))
 
     def __getitem__(self, index):
-        input=self.low[index]
-        #_,x,y=intensor.size()
-        #xc = random.randint(0, x - self.patch_size)
-        #yc = random.randint(0, y - self.patch_size)
+        input = self.low[index]
+        # _,x,y=intensor.size()
+        # xc = random.randint(0, x - self.patch_size)
+        # yc = random.randint(0, y - self.patch_size)
         if self.data_augmentation:
             input = self.augmentation(input)
         if self.data_transform:
-            croppedtensor=self.transform(input)
+            croppedtensor = self.transform(input) #CHW
         return croppedtensor
+
+    def __len__(self):
+        # return len(self.hr_image_filenames)
+        return len(self.lr_image_filenames)
+
+
+class NaEnhance(data.Dataset):
+    def __init__(self, LR_dir, patch_size, data_augmentation, data_transform):
+        self.lr_image_filenames = [join(LR_dir, x) for x in listdir(LR_dir) if is_image_file(x)]
+        self.patch_size = patch_size
+        self.data_augmentation = data_augmentation
+        self.data_transform = data_transform
+        self.na = []
+        self.low = []
+        self.tensor = []
+        self.bins = np.float64((np.logspace(0, 8, 128, endpoint=True, base=2.0) - 1)) / 255.0
+        self.weights = define_weights(5)
+        self.augmentation = torchvision.transforms.Compose([torchvision.transforms.CenterCrop(patch_size),
+                                                            torchvision.transforms.RandomHorizontalFlip(0.5),
+                                                            torchvision.transforms.RandomVerticalFlip(0.5)])
+
+        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+        for idx in range(len(self.lr_image_filenames)):
+            input = Image.open(self.lr_image_filenames[idx])  # type:PIL.Image
+            array = np.asarray(input).transpose(2, 0, 1) / 255
+            na = 0
+            for i in range(array.shape[0]):
+                na += get_na(self.bins, self.weights, array[i], 5)
+            self.na.append(na / array.shape[0])
+            # intensor=self.transform(input)
+            self.low.append(input)
+            if idx % 50 == 0:
+                print("loading:{}/{}".format(idx, len(self.lr_image_filenames)))
+
+    def __getitem__(self, index):
+        input = self.low[index]
+        # _,x,y=intensor.size()
+        # xc = random.randint(0, x - self.patch_size)
+        # yc = random.randint(0, y - self.patch_size)
+        if self.data_augmentation:
+            input = self.augmentation(input)
+        if self.data_transform:
+            croppedtensor = self.transform(input)
+        return croppedtensor, np.float32(self.na[index])
+
+    def __len__(self):
+        # return len(self.hr_image_filenames)
+        return len(self.lr_image_filenames)
+
+
+class NaEnhanceTest(data.Dataset):
+    def __init__(self, LR_dir, patch_size, data_augmentation, data_transform):
+        self.lr_image_filenames = [join(LR_dir, x) for x in listdir(LR_dir) if is_image_file(x)]
+        self.patch_size = patch_size
+        self.data_augmentation = data_augmentation
+        self.data_transform = data_transform
+        self.na = []
+        self.low = []
+        self.tensor = []
+        self.bins = np.float64((np.logspace(0, 8, 128, endpoint=True, base=2.0) - 1)) / 255.0
+        self.weights = define_weights(5)
+        self.augmentation = torchvision.transforms.Compose([torchvision.transforms.CenterCrop(patch_size),
+                                                            torchvision.transforms.RandomHorizontalFlip(0.5),
+                                                            torchvision.transforms.RandomVerticalFlip(0.5)])
+
+        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+        for idx in range(len(self.lr_image_filenames)):
+            input = Image.open(self.lr_image_filenames[idx])  # type:PIL.Image
+            array = np.asarray(input).transpose(2, 0, 1) / 255
+            na = 0
+            for i in range(array.shape[0]):
+                na += get_na(self.bins, self.weights, array[i], 5) #5倍系数属于是拉满了
+            self.na.append(na / array.shape[0])
+            # intensor=self.transform(input)
+            self.low.append(input)
+            if idx % 50 == 0:
+                print("loading:{}/{}".format(idx, len(self.lr_image_filenames)))
+
+    def __getitem__(self, index):
+        input = self.low[index]
+        name=self.lr_image_filenames[index]
+        # _,x,y=intensor.size()
+        # xc = random.randint(0, x - self.patch_size)
+        # yc = random.randint(0, y - self.patch_size)
+        if self.data_augmentation:
+            input = self.augmentation(input)
+        if self.data_transform:
+            croppedtensor = self.transform(input)
+        return croppedtensor, np.float32(self.na[index]),name
+
+    def __len__(self):
+        # return len(self.hr_image_filenames)
+        return len(self.lr_image_filenames)
+
+class TimeTest(data.Dataset):
+    def __init__(self, LR_dir, patch_size, data_augmentation, data_transform):
+        self.lr_image_filenames = [join(LR_dir, x) for x in listdir(LR_dir) if is_image_file(x)]
+        self.patch_size = patch_size
+        self.data_augmentation = data_augmentation
+        self.data_transform = data_transform
+        self.na = []
+        self.low = []
+        self.tensor = []
+        self.bins = np.float64((np.logspace(0, 8, 128, endpoint=True, base=2.0) - 1)) / 255.0
+        self.weights = define_weights(5)
+        self.augmentation = torchvision.transforms.Compose([torchvision.transforms.CenterCrop(patch_size),
+                                                            torchvision.transforms.RandomHorizontalFlip(0.5),
+                                                            torchvision.transforms.RandomVerticalFlip(0.5)])
+
+        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+        for idx in range(len(self.lr_image_filenames)):
+            input = Image.open(self.lr_image_filenames[idx])  # type:PIL.Image
+            array = np.asarray(input).transpose(2, 0, 1) / 255
+            #na = 0
+            #for i in range(array.shape[0]):
+            #    na += get_na(self.bins, self.weights, array[i], 5) #5倍系数属于是拉满了
+            #self.na.append(na / array.shape[0])
+            # intensor=self.transform(input)
+            self.low.append(input)
+            if idx % 50 == 0:
+                print("loading:{}/{}".format(idx, len(self.lr_image_filenames)))
+
+    def __getitem__(self, index):
+        input = self.low[index]
+        name=self.lr_image_filenames[index]
+        # _,x,y=intensor.size()
+        # xc = random.randint(0, x - self.patch_size)
+        # yc = random.randint(0, y - self.patch_size)
+        if self.data_augmentation:
+            input = self.augmentation(input)
+        if self.data_transform:
+            croppedtensor = self.transform(input)
+        return croppedtensor,name
 
     def __len__(self):
         # return len(self.hr_image_filenames)

@@ -55,6 +55,8 @@ image_path = opt.save + '/image_epochs/'
 os.makedirs(image_path, exist_ok=True)
 syn_path = opt.save+'/synthesis/'
 os.makedirs(syn_path, exist_ok=True)
+os.makedirs(os.path.join(opt.save,"scripts/lib"),exist_ok=True)
+
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format=log_format, datefmt='%m/%d %I:%M:%S %p')
@@ -67,7 +69,7 @@ for script in glob.glob("*.py"):
     dst_file = os.path.join(opt.save, 'scripts', os.path.basename(script))
     shutil.copyfile(script, dst_file)
 for script in glob.glob("./lib/*.py"):
-    dst_file = os.path.join(opt.save, 'scripts', os.path.basename(script))
+    dst_file = os.path.join(opt.save, 'scripts/lib', os.path.basename(script))
     shutil.copyfile(script, dst_file)
 
 
