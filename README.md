@@ -24,8 +24,9 @@ We also made the network better by adding more layers and using pyramid feature 
 
 `model.py` consists of all networks, including ones from DLN.
 
-`Untitled.m` NIQE
+`Untitled.m` measures by NIQE
 
+`nonref.m` measures by BRISQUE
 
 # Back-projection theory reference
 
